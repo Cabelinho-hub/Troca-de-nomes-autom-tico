@@ -1,0 +1,6 @@
+discord.py
+flask
+gunicorn
+psycopg2-binary
+pytz
+better-profanity
