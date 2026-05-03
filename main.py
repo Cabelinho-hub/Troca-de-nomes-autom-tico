@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import asyncio
 
 # 1. CONFIGURAÇÕES (Preencha com os IDs do seu servidor)
 TOKEN = "SEU_TOKEN_AQUI"
