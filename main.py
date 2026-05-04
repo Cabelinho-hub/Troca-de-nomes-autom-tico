@@ -92,48 +92,65 @@ async def julgar(ctx):
     url = None
     path = None
 
-    # Se você respondeu a uma mensagem que tem link
+    # Se você respondeu a uma mensagem
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        # Verifica se na mensagem respondida tem um link
         if "http" in ref_msg.content:
-            url = [w for w in ref_msg.content.split() if "http" in w][0]
+            palavras = ref_msg.content.split()
+            for p in palavras:
+                if "http" in p:
+                    url = p
+                    break
+        # Se não tem link, vê se tem anexo
         elif ref_msg.attachments:
             attachment = ref_msg.attachments[0]
             path = f"./temp_{attachment.filename}"
             await attachment.save(path)
 
-    # Se você mandou o link direto no comando !julgar http...
+    # Se você mandou o link direto no comando: !julgar http...
     elif "http" in ctx.message.content:
-        url = [w for w in ctx.message.content.split() if "http" in w][0]
+        palavras = ctx.message.content.split()
+        for p in palavras:
+            if "http" in p:
+                url = p
+                break
+    
+    # Se tem anexo direto no comando
+    elif ctx.message.attachments:
+        attachment = ctx.message.attachments[0]
+        path = f"./temp_{attachment.filename}"
+        await attachment.save(path)
 
-    # Se o link foi encontrado, vamos baixar
+    # 2. Se achou link, baixa o vídeo
     if url:
-        msg_wait = await ctx.send("📥 Baixando vídeo do link (isso pode demorar)...")
+        msg_wait = await ctx.send("📥 Baixando vídeo do link...")
         path = baixar_video_link(url)
         await msg_wait.delete()
 
-    # 2. Se depois de tudo isso temos um arquivo (path), mandamos para a IA
+    # 3. Enviar para a IA
     if path:
         msg_analise = await ctx.send("⚖️ Analisando contra as regras do Raze RP...")
         try:
             myfile = genai.upload_file(path)
-            regras = extrair_regras_completo() # Sua função de ler o site
+            regras = extrair_regras_completo()
             
-            prompt = f"Analise este vídeo com base nestas regras: {regras}. O jogador cometeu alguma infração? Responda detalhadamente."
+            prompt = f"Analise este vídeo com base nestas regras: {regras}. O jogador cometeu infração? Dê o veredito."
             response = model.generate_content([prompt, myfile])
             
-            # Enviar para o CANAL DE LOGS (Substitua pelo ID do seu canal)
-            canal_log = bot.get_channel(1234567890) # COLOQUE O SEU ID AQUI
+            # Enviar para o CANAL DE LOGS
+            canal_log = bot.get_channel(ID_CANAL_LOGS)
             if canal_log:
-                await canal_log.send(f"⚠️ **DENÚNCIA ANALISADA**\nAutor: {ctx.author}\n\n{response.text}")
+                await canal_log.send(f"⚠️ **NOVO JULGAMENTO**\nSolicitado por: {ctx.author.mention}\n\n**Veredito:**\n{response.text}")
             
-            await msg_analise.edit(content="✅ Análise concluída! Verifique o canal de logs.")
+            await msg_analise.edit(content="✅ Julgamento finalizado! Confira o canal de logs.")
         except Exception as e:
             await msg_analise.edit(content=f"❌ Erro na IA: {e}")
         finally:
-            if os.path.exists(path): os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
     else:
-        await ctx.send("❌ Não encontrei um vídeo ou link válido para analisar.")
+        await ctx.send("❌ Não encontrei vídeo ou link para analisar. Tente anexar o arquivo ou responder a um link!")
 
         except Exception as e:
             await msg_status.edit(content=f"❌ Erro: {e}")
