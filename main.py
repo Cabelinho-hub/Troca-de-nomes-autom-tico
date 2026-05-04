@@ -108,6 +108,12 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-keep_alive()
-bot.run(TOKEN)
-bot.run(DISCORD_TOKEN)
+if __name__ == "__main__":
+    keep_alive()
+    # Esta linha pega o valor que você salvou no Render
+    token_sistema = os.environ.get("TOKEN") 
+    
+    if token_sistema is None:
+        print("ERRO: A variável 'TOKEN' não foi encontrada no Render!")
+    else:
+        bot.run(token_sistema)
