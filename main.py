@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import time
 from flask import Flask
 from threading import Thread
+import yt_dlp
 
 app = Flask('')
 
@@ -29,6 +30,18 @@ ID_CANAL_LOGS = 1417278749497364550
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash') # Versão rápida e grátis
 
+def baixar_video_link(url):
+    ydl_opts = {
+        'format': 'mp4/best',  # Garante que venha em MP4
+        'outtmpl': './temp_video.mp4',
+        'max_filesize': 40 * 1024 * 1024, # Limite de 40MB para não travar o Render
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        return './temp_video.mp4'
+    except:
+        return None
 # Configurar Bot Discord
 intents = discord.Intents.default()
 intents.message_content = True
@@ -75,47 +88,52 @@ async def on_ready():
 
 @bot.command()
 async def julgar(ctx):
-    """Comando !julgar: analise o anexo da mensagem ou a mensagem acima"""
-    
-    # Verifica se o usuário mandou um anexo junto com o comando !julgar
-    attachment = None
-    if ctx.message.attachments:
-        attachment = ctx.message.attachments[0]
-    # Se não mandou anexo, verifica se o comando foi uma resposta a outra mensagem com anexo
-    elif ctx.message.reference:
+    # 1. Tentar achar o link ou arquivo
+    url = None
+    path = None
+
+    # Se você respondeu a uma mensagem que tem link
+    if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
+        if "http" in ref_msg.content:
+            url = [w for w in ref_msg.content.split() if "http" in w][0]
+        elif ref_msg.attachments:
             attachment = ref_msg.attachments[0]
+            path = f"./temp_{attachment.filename}"
+            await attachment.save(path)
 
-    if not attachment:
-        return await ctx.send("❌ Você precisa enviar uma imagem/vídeo com o comando ou responder a um vídeo!")
+    # Se você mandou o link direto no comando !julgar http...
+    elif "http" in ctx.message.content:
+        url = [w for w in ctx.message.content.split() if "http" in w][0]
 
-    if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'mp4', 'mov']):
-        # Canal de Logs
-        canal_log = bot.get_channel(ID_CANAL_LOGS)
-        
-        msg_status = await ctx.send("⚖️ Enviando para o tribunal da IA...")
-        path = f"./temp_{attachment.filename}"
-        await attachment.save(path)
+    # Se o link foi encontrado, vamos baixar
+    if url:
+        msg_wait = await ctx.send("📥 Baixando vídeo do link (isso pode demorar)...")
+        path = baixar_video_link(url)
+        await msg_wait.delete()
 
+    # 2. Se depois de tudo isso temos um arquivo (path), mandamos para a IA
+    if path:
+        msg_analise = await ctx.send("⚖️ Analisando contra as regras do Raze RP...")
         try:
             myfile = genai.upload_file(path)
-            regras = extrair_regras_completo() # Sua função que lê o GitBook
+            regras = extrair_regras_completo() # Sua função de ler o site
             
-            prompt = f"Analise esta mídia conforme as regras: {regras}. Diga se há infração."
+            prompt = f"Analise este vídeo com base nestas regras: {regras}. O jogador cometeu alguma infração? Responda detalhadamente."
             response = model.generate_content([prompt, myfile])
-
-            # Manda a resposta detalhada no canal de LOGS
-            embed = discord.Embed(title="⚖️ Novo Julgamento de Denúncia", color=discord.Color.red())
-            embed.add_field(name="Autor do Comando", value=ctx.author.mention)
-            embed.add_field(name="Veredito", value=response.text)
-            embed.set_footer(text="IA Moderadora Raze RP")
             
+            # Enviar para o CANAL DE LOGS (Substitua pelo ID do seu canal)
+            canal_log = bot.get_channel(1234567890) # COLOQUE O SEU ID AQUI
             if canal_log:
-                await canal_log.send(embed=embed)
+                await canal_log.send(f"⚠️ **DENÚNCIA ANALISADA**\nAutor: {ctx.author}\n\n{response.text}")
             
-            # Responde no canal atual de forma resumida
-            await msg_status.edit(content=f"✅ Julgamento concluído! Detalhes enviados no canal de logs.")
+            await msg_analise.edit(content="✅ Análise concluída! Verifique o canal de logs.")
+        except Exception as e:
+            await msg_analise.edit(content=f"❌ Erro na IA: {e}")
+        finally:
+            if os.path.exists(path): os.remove(path)
+    else:
+        await ctx.send("❌ Não encontrei um vídeo ou link válido para analisar.")
 
         except Exception as e:
             await msg_status.edit(content=f"❌ Erro: {e}")
