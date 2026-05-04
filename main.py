@@ -84,7 +84,9 @@ def extrair_regras_completo():
 # --- BOT DISCORD ---
 
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # Permite ler o conteúdo das mensagens
+intents.members = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
