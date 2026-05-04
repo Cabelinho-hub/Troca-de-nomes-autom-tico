@@ -35,12 +35,26 @@ client_groq = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 def baixar_video(url):
     unique_id = str(uuid.uuid4())[:8]
     filename = f'temp_{unique_id}.mp4'
-    ydl_opts = {'format': 'mp4/best', 'outtmpl': filename, 'max_filesize': 30*1024*1024, 'quiet': True}
+    ydl_opts = {
+        'format': 'mp4/best',
+        'outtmpl': filename,
+        'max_filesize': 30*1024*1024, # Limite de 30MB
+        'quiet': True,
+        'no_warnings': True
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        return filename
-    except: return None
+        
+        # Verifica se o arquivo realmente existe no servidor após o download
+        if os.path.exists(filename):
+            return filename
+        else:
+            print(f"Erro: Arquivo {filename} não foi criado.")
+            return None
+    except Exception as e:
+        print(f"Erro no yt-dlp: {e}")
+        return None
 
 async def extrair_regras():
     url = "https://gitbook.io"
