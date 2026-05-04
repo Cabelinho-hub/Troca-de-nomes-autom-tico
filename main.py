@@ -5,7 +5,21 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import time
+from flask import Flask
+from threading import Thread
 
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot Online!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start() 
 # --- CONFIGURAÇÕES ---
 DISCORD_TOKEN = 'SEU_TOKEN_AQUI'
 GEMINI_KEY = 'AIzaSyBmIuFCFu2XITTr_JI7cCMXBxcDNotu3Yg'
@@ -94,4 +108,6 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+keep_alive()
+bot.run(TOKEN)
 bot.run(DISCORD_TOKEN)
