@@ -29,12 +29,14 @@ def keep_alive():
 ID_CANAL_LOGS = 1417278749497364550
 GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    print("ERRO: Variável 'GEMINI_KEY' não encontrada!")
+CHAVE_IA = os.environ.get("GEMINI_KEY")
 
+if not CHAVE_IA:
+    print("❌ ERRO: Variável 'GEMINI_KEY' não encontrada no Render!")
+else:
+    genai.configure(api_key=CHAVE_IA)
+    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+    print("✅ IA configurada com sucesso!")
 # --- FUNÇÕES DE SUPORTE ---
 
 def baixar_video_link(url):
