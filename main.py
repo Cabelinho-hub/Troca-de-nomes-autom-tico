@@ -26,8 +26,10 @@ def keep_alive():
 # --- CONFIGURAÇÃO DAS IAs ---
 # Gemini para Visão (Vídeo)
 genai.configure(api_key=os.environ.get("GEMINI_KEY"))
-model_gemini = genai.GenerativeModel('gemini-1.5-flash')
-
+model_gemini = genai.GenerativeModel(
+    model_name='gemini-1.5-flash',
+    generation_config={"request_options": {"api_version": "v1"}}
+    
 # Groq para Lógica e Regras (Texto)
 client_groq = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
