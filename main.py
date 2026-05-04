@@ -5,6 +5,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import time
+import asyncio  # Necessário para não travar o bot
 from flask import Flask
 from threading import Thread
 import yt_dlp
@@ -25,14 +26,15 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURAÇÕES ---
-# Recomendo colocar GEMINI_KEY no Environment Variables do Render também!
-GEMINI_KEY = os.environ.get("GEMINI_KEY") 
 ID_CANAL_LOGS = 1417278749497364550
+GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
-CHAVE_IA = os.environ.get("GEMINI_KEY")
-genai.configure(api_key=os.environ.get("GEMINI_KEY"))
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    print("ERRO: Variável 'GEMINI_KEY' não encontrada!")
 
-model = genai.GenerativeModel('gemini-1.5-flash') 
 # --- FUNÇÕES DE SUPORTE ---
 
 def baixar_video_link(url):
@@ -52,30 +54,32 @@ def baixar_video_link(url):
         print(f"Erro no download: {e}")
         return None
 
-def extrair_regras_completo():
-    base_url = "https://razerp.gitbook.io/raze-roleplay"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+async def extrair_regras_completo():
+    base_url = "https://gitbook.io"
+    headers = {'User-Agent': 'Mozilla/5.0'}
     
     try:
-        res = requests.get(base_url, headers=headers)
+        # Usando loop executor para não travar o bot durante o request
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(None, lambda: requests.get(base_url, headers=headers))
         soup = BeautifulSoup(res.text, 'html.parser')
         
         links = set()
         for a in soup.find_all('a', href=True):
             href = a['href']
             if href.startswith('/raze-roleplay/'):
-                links.add("https://razerp.gitbook.io" + href)
+                links.add("https://gitbook.io" + href)
         
         regras_finais = ""
-        # Limitado a 10 páginas para performance no Render
-        for link in list(links)[:10]: 
-            r = requests.get(link, headers=headers)
+        paginas = list(links)[:10] 
+        
+        for link in paginas:
+            r = await loop.run_in_executor(None, lambda: requests.get(link, headers=headers))
             s = BeautifulSoup(r.text, 'html.parser')
-            
             titulo = s.find('h1').get_text() if s.find('h1') else "Regra"
             texto = " ".join([p.get_text() for p in s.find_all(['p', 'li'])])
             regras_finais += f"\n--- {titulo} ---\n{texto}\n"
-            time.sleep(0.5)
+            await asyncio.sleep(0.1)
 
         return regras_finais[:30000]
     except Exception as e:
@@ -84,7 +88,7 @@ def extrair_regras_completo():
 # --- BOT DISCORD ---
 
 intents = discord.Intents.default()
-intents.message_content = True  # Permite ler o conteúdo das mensagens
+intents.message_content = True  
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -98,14 +102,13 @@ async def julgar(ctx):
     url = None
     path = None
 
-    # Verifica se é resposta, link no texto ou anexo
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if "http" in ref_msg.content:
             url = [p for p in ref_msg.content.split() if "http" in p][0]
         elif ref_msg.attachments:
             attachment = ref_msg.attachments[0]
-            path = f"temp_{attachment.filename}"
+            path = f"temp_{uuid.uuid4().hex}_{attachment.filename}"
             await attachment.save(path)
 
     elif "http" in ctx.message.content:
@@ -113,7 +116,7 @@ async def julgar(ctx):
     
     elif ctx.message.attachments:
         attachment = ctx.message.attachments[0]
-        path = f"temp_{attachment.filename}"
+        path = f"temp_{uuid.uuid4().hex}_{attachment.filename}"
         await attachment.save(path)
 
     if url and not path:
@@ -124,15 +127,14 @@ async def julgar(ctx):
     if path:
         msg_analise = await ctx.send("⚖️ Analisando evidências contra o regulamento...")
         try:
-            # Upload para o Gemini
+            # Upload e Processamento
             myfile = genai.upload_file(path)
             
-            # Aguarda o processamento do vídeo no Google (importante para vídeos longos)
             while myfile.state.name == "PROCESSING":
-                time.sleep(2)
+                await asyncio.sleep(3) # Espera sem travar o bot
                 myfile = genai.get_file(myfile.name)
 
-            regras = extrair_regras_completo()
+            regras = await extrair_regras_completo()
             
             prompt = (
                 f"Você é um moderador de Roleplay experiente. "
@@ -143,7 +145,7 @@ async def julgar(ctx):
             response = model.generate_content([prompt, myfile])
             
             canal_log = bot.get_channel(ID_CANAL_LOGS)
-            veredito_texto = f"⚠️ **NOVO JULGAMENTO**\n**Réu/Solicitado por:** {ctx.author.mention}\n\n**Veredito da IA:**\n{response.text}"
+            veredito_texto = f"⚠️ **NOVO JULGAMENTO**\n**Solicitado por:** {ctx.author.mention}\n\n**Veredito da IA:**\n{response.text}"
             
             if canal_log:
                 await canal_log.send(veredito_texto)
@@ -154,11 +156,9 @@ async def julgar(ctx):
         except Exception as e:
             await msg_analise.edit(content=f"❌ Erro durante a análise: {e}")
         finally:
-            # Garante que o arquivo seja deletado
             if path and os.path.exists(path):
                 os.remove(path)
-                try:
-                    genai.delete_file(myfile.name) # Limpa no Google Cloud também
+                try: genai.delete_file(myfile.name)
                 except: pass
     else:
         await ctx.send("❌ Nenhum vídeo encontrado. Envie um arquivo, um link ou responda a um vídeo com !julgar.")
