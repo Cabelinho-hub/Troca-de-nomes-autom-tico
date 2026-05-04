@@ -24,7 +24,7 @@ def keep_alive():
 DISCORD_TOKEN = 'SEU_TOKEN_AQUI'
 GEMINI_KEY = 'AIzaSyBmIuFCFu2XITTr_JI7cCMXBxcDNotu3Yg'
 URL_REGRAS = 'https://razerp.gitbook.io/raze-roleplay' # O bot vai ler aqui
-
+ID_CANAL_LOGS = 1417278749497364550
 # Configurar IA
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash') # Versão rápida e grátis
@@ -73,40 +73,55 @@ def extrair_regras_completo():
 async def on_ready():
     print(f'Bot {bot.user} online e julgando!')
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
+@bot.command()
+async def julgar(ctx):
+    """Comando !julgar: analise o anexo da mensagem ou a mensagem acima"""
+    
+    # Verifica se o usuário mandou um anexo junto com o comando !julgar
+    attachment = None
+    if ctx.message.attachments:
+        attachment = ctx.message.attachments[0]
+    # Se não mandou anexo, verifica se o comando foi uma resposta a outra mensagem com anexo
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            attachment = ref_msg.attachments[0]
 
-    # Verificar se há anexos (imagem ou vídeo)
-    if message.attachments:
-        attachment = message.attachments[0]
+    if not attachment:
+        return await ctx.send("❌ Você precisa enviar uma imagem/vídeo com o comando ou responder a um vídeo!")
+
+    if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'mp4', 'mov']):
+        # Canal de Logs
+        canal_log = bot.get_channel(ID_CANAL_LOGS)
         
-        if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'mp4', 'mov']):
-            msg_analise = await message.channel.send("👀 Analisando mídia contra as regras...")
+        msg_status = await ctx.send("⚖️ Enviando para o tribunal da IA...")
+        path = f"./temp_{attachment.filename}"
+        await attachment.save(path)
+
+        try:
+            myfile = genai.upload_file(path)
+            regras = extrair_regras_completo() # Sua função que lê o GitBook
             
-            # Download temporário
-            path = f"./temp_{attachment.filename}"
-            await attachment.save(path)
+            prompt = f"Analise esta mídia conforme as regras: {regras}. Diga se há infração."
+            response = model.generate_content([prompt, myfile])
 
-            try:
-                # 1. Carregar arquivo no Google AI
-                myfile = genai.upload_file(path)
-                regras = extrair_regras()
-                
-                # 2. Pedir julgamento à IA
-                prompt = f"Baseado nestas regras: {regras}. Analise este arquivo e diga se ele viola algo. Responda de forma curta: 'APROVADO' ou 'VIOLAÇÃO: [motivo]'."
-                response = model.generate_content([prompt, myfile])
-                
-                await msg_analise.edit(content=f"⚖️ **Veredito:** {response.text}")
+            # Manda a resposta detalhada no canal de LOGS
+            embed = discord.Embed(title="⚖️ Novo Julgamento de Denúncia", color=discord.Color.red())
+            embed.add_field(name="Autor do Comando", value=ctx.author.mention)
+            embed.add_field(name="Veredito", value=response.text)
+            embed.set_footer(text="IA Moderadora Raze RP")
+            
+            if canal_log:
+                await canal_log.send(embed=embed)
+            
+            # Responde no canal atual de forma resumida
+            await msg_status.edit(content=f"✅ Julgamento concluído! Detalhes enviados no canal de logs.")
 
-            except Exception as e:
-                await msg_analise.edit(content=f"❌ Erro na análise: {e}")
-            finally:
-                if os.path.exists(path):
-                    os.remove(path)
-
-    await bot.process_commands(message)
+        except Exception as e:
+            await msg_status.edit(content=f"❌ Erro: {e}")
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
 
 if __name__ == "__main__":
     keep_alive()
