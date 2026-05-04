@@ -1,5 +1,5 @@
 discord.py
-google-generativeai
+groq
 requests
 beautifulsoup4
 flask
