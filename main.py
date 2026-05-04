@@ -29,8 +29,8 @@ def keep_alive():
 GEMINI_KEY = os.environ.get("GEMINI_KEY", "AIzaSy...") 
 ID_CANAL_LOGS = 1417278749497364550
 
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+CHAVE_IA = os.environ.get("GEMINI_KEY")
+genai.configure(api_key=CHAVE_IA)
 
 # --- FUNÇÕES DE SUPORTE ---
 
