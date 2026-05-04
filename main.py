@@ -153,11 +153,11 @@ async def julgar(ctx):
         await ctx.send("❌ Não encontrei vídeo ou link para analisar. Tente anexar o arquivo ou responder a um link!")
 
         except Exception as e:
-            await msg_status.edit(content=f"❌ Erro: {e}")
+            await msg_analise.edit(content=f"❌ Erro na IA: {e}")
         finally:
             if os.path.exists(path):
                 os.remove(path)
-
+                
 if __name__ == "__main__":
     keep_alive()
     # Esta linha pega o valor que você salvou no Render
