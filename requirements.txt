@@ -4,3 +4,4 @@ requests
 beautifulsoup4
 flask
 yt-dlp
+google-generativeai>=0.8.3
