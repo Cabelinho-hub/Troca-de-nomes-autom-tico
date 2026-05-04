@@ -30,13 +30,13 @@ ID_CANAL_LOGS = 1417278749497364550
 GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
 CHAVE_IA = os.environ.get("GEMINI_KEY")
+genai.configure(api_key=CHAVE_IA)
 
-if not CHAVE_IA:
-    print("❌ ERRO: Variável 'GEMINI_KEY' não encontrada no Render!")
-else:
-    genai.configure(api_key=CHAVE_IA)
-    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
-    print("✅ IA configurada com sucesso!")
+# Forçamos o uso da versão 1 (estável) que não dá erro 404
+model = genai.GenerativeModel(
+    model_name='gemini-1.5-flash',
+    generation_config={"response_mime_type": "text/plain"}
+)
 # --- FUNÇÕES DE SUPORTE ---
 
 def baixar_video_link(url):
