@@ -31,8 +31,7 @@ ID_CANAL_LOGS = 1417278749497364550
 
 CHAVE_IA = os.environ.get("GEMINI_KEY")
 genai.configure(api_key=os.environ.get("GEMINI_KEY"))
-
-model = genai.GenerativeModel(model_name="gemini-1.5-pro")
+model = genai.GenerativeModel('gemini-1.0-pro') 
 # --- FUNÇÕES DE SUPORTE ---
 
 def baixar_video_link(url):
