@@ -159,7 +159,7 @@ async def julgar(ctx):
         except Exception as e:
             await msg_analise.edit(content=f"❌ Erro na IA: {e}")
         finally:
-            if os.path.exists(path):
+            if path and os.path.exists(path):
                 os.remove(path)
                 
 if __name__ == "__main__":
