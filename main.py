@@ -30,7 +30,7 @@ GEMINI_KEY = os.environ.get("GEMINI_KEY", "AIzaSy...")
 ID_CANAL_LOGS = 1417278749497364550
 
 CHAVE_IA = os.environ.get("GEMINI_KEY")
-genai.configure(api_key=CHAVE_IA)
+genai.configure(api_key=os.environ.get("GEMINI_KEY"))
 
 # --- FUNÇÕES DE SUPORTE ---
 
