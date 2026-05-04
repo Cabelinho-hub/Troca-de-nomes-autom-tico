@@ -95,14 +95,12 @@ async def julgar(ctx):
     # Se você respondeu a uma mensagem
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        # Verifica se na mensagem respondida tem um link
         if "http" in ref_msg.content:
             palavras = ref_msg.content.split()
             for p in palavras:
                 if "http" in p:
                     url = p
                     break
-        # Se não tem link, vê se tem anexo
         elif ref_msg.attachments:
             attachment = ref_msg.attachments[0]
             path = f"./temp_{attachment.filename}"
@@ -116,38 +114,44 @@ async def julgar(ctx):
                 url = p
                 break
     
-    # Se tem anexo direto no comando
+    # Se o anexo está direto no comando
     elif ctx.message.attachments:
         attachment = ctx.message.attachments[0]
         path = f"./temp_{attachment.filename}"
         await attachment.save(path)
 
-    # 2. Se achou link, baixa o vídeo
+    # 2. Se achou link, tenta baixar
     if url:
         msg_wait = await ctx.send("📥 Baixando vídeo do link...")
         path = baixar_video_link(url)
         await msg_wait.delete()
 
-    # 3. Enviar para a IA
+    # 3. Processo de análise da IA
     if path:
         msg_analise = await ctx.send("⚖️ Analisando contra as regras do Raze RP...")
         try:
+            # Upload para o Google Gemini
             myfile = genai.upload_file(path)
+            
+            # Puxa as regras do site (GitBook)
             regras = extrair_regras_completo()
             
             prompt = f"Analise este vídeo com base nestas regras: {regras}. O jogador cometeu infração? Dê o veredito."
             response = model.generate_content([prompt, myfile])
             
-            # Enviar para o CANAL DE LOGS
+            # Enviar para o CANAL DE LOGS (Verifique se ID_CANAL_LOGS está definido no topo)
             canal_log = bot.get_channel(ID_CANAL_LOGS)
             if canal_log:
                 await canal_log.send(f"⚠️ **NOVO JULGAMENTO**\nSolicitado por: {ctx.author.mention}\n\n**Veredito:**\n{response.text}")
-            
-            await msg_analise.edit(content="✅ Julgamento finalizado! Confira o canal de logs.")
+                await msg_analise.edit(content="✅ Julgamento finalizado! Confira o canal de logs.")
+            else:
+                await msg_analise.edit(content=f"✅ **Veredito:**\n{response.text}")
+                
         except Exception as e:
             await msg_analise.edit(content=f"❌ Erro na IA: {e}")
         finally:
-            if os.path.exists(path):
+            # Limpa o arquivo temporário para não encher o servidor
+            if path and os.path.exists(path):
                 os.remove(path)
     else:
         await ctx.send("❌ Não encontrei vídeo ou link para analisar. Tente anexar o arquivo ou responder a um link!")
