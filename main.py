@@ -26,12 +26,13 @@ def keep_alive():
 
 # --- CONFIGURAÇÕES ---
 # Recomendo colocar GEMINI_KEY no Environment Variables do Render também!
-GEMINI_KEY = os.environ.get("GEMINI_KEY", "AIzaSy...") 
+GEMINI_KEY = os.environ.get("GEMINI_KEY") 
 ID_CANAL_LOGS = 1417278749497364550
 
 CHAVE_IA = os.environ.get("GEMINI_KEY")
 genai.configure(api_key=os.environ.get("GEMINI_KEY"))
-model = genai.GenerativeModel('gemini-1.0-pro') 
+
+model = genai.GenerativeModel('gemini-1.5-flash') 
 # --- FUNÇÕES DE SUPORTE ---
 
 def baixar_video_link(url):
