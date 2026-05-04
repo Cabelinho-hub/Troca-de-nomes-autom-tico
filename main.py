@@ -84,7 +84,7 @@ async def julgar(ctx, *, denuncia: str = None):
                     "content": f"Julgue a seguinte situação e diga se houve VDM, RDM ou outra infração: {situacao}",
                 }
             ],
-            model="llama-3.1-70b-versatile",
+            model="llama-3.3-70b-versatile",
         )
 
         veredito = chat_completion.choices[0].message.content
