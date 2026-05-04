@@ -1,67 +1,97 @@
 import discord
 from discord.ext import commands
-import asyncio
+import google.generativeai as genai
+import os
+import requests
+from bs4 import BeautifulSoup
+import time
 
-# 1. CONFIGURAÇÕES (Preencha com os IDs do seu servidor)
-TOKEN = "SEU_TOKEN_AQUI"
-CANAL_ENTRADA = 1465403347694522490       # Canal onde as pessoas digitam "ID Nome"
-LOG_SUCESSO = 1417278744258937005          # Canal onde o bot avisa que deu certo
-LOG_ERRO = 1417278747031109662             # Canal onde o bot avisa falhas
-CARGOS_IGNORADOS = [1411158281409400832]    # IDs de cargos que o bot NÃO pode renomear
+# --- CONFIGURAÇÕES ---
+DISCORD_TOKEN = 'SEU_TOKEN_AQUI'
+GEMINI_KEY = 'AIzaSyBmIuFCFu2XITTr_JI7cCMXBxcDNotu3Yg'
+URL_REGRAS = 'https://razerp.gitbook.io/raze-roleplay' # O bot vai ler aqui
 
-# 2. INICIALIZAÇÃO (Intents são obrigatórios para ler mensagens e membros)
+# Configurar IA
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash') # Versão rápida e grátis
+
+# Configurar Bot Discord
 intents = discord.Intents.default()
-intents.message_content = True  # Para ler o que foi digitado
-intents.members = True          # Para encontrar e renomear os membros
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+def extrair_regras_completo():
+    """Varre todas as páginas do GitBook do Raze RP"""
+    base_url = "https://razerp.gitbook.io/raze-roleplay"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    try:
+        # 1. Pega a página principal para achar os links das outras abas
+        res = requests.get(base_url, headers=headers)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        # Procura por links que apontam para sub-páginas do GitBook
+        links = set()
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if href.startswith('/raze-roleplay/'):
+                links.add("https://razerp.gitbook.io" + href)
+        
+        print(f"📚 Encontradas {len(links)} páginas de regras. Lendo conteúdo...")
+
+        regras_finais = ""
+        # 2. Visita cada link e extrai o texto
+        for link in list(links)[:15]: # Limite de 15 páginas para não travar
+            r = requests.get(link, headers=headers)
+            s = BeautifulSoup(r.text, 'html.parser')
+            
+            # Pega o título da página e o texto dos parágrafos
+            titulo = s.find('h1').text if s.find('h1') else "Sem Título"
+            texto = " ".join([p.text for p in s.find_all(['p', 'li'])])
+            regras_finais += f"\n--- SEÇÃO: {titulo} ---\n{texto}\n"
+            time.sleep(1) # Pausa leve para não ser bloqueado
+
+        return regras_finais[:30000] # O Gemini Flash aguenta muito texto
+    except Exception as e:
+        return f"Erro ao ler site: {e}"
+        
 @bot.event
 async def on_ready():
-    print(f"✅ Bot de Nomes online como {bot.user}")
+    print(f'Bot {bot.user} online e julgando!')
 
-# 3. O SEU EVENTO (O código que você mandou)
 @bot.event
 async def on_message(message):
-    if message.author.id == bot.user.id:
+    if message.author == bot.user:
         return
+
+    # Verificar se há anexos (imagem ou vídeo)
+    if message.attachments:
+        attachment = message.attachments[0]
         
-    if message.channel.id == CANAL_ENTRADA:
-        partes = message.content.split(' ', 1)
-        if len(partes) < 2:
-            return
-
-        try:
-            user_id = int(partes[0])
-            novo_nome = f"#{partes[1]}"
+        if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'mp4', 'mov']):
+            msg_analise = await message.channel.send("👀 Analisando mídia contra as regras...")
             
-            guild = message.guild
-            member = guild.get_member(user_id)
+            # Download temporário
+            path = f"./temp_{attachment.filename}"
+            await attachment.save(path)
 
-            if member:
-                # Verifica cargos protegidos
-                if any(role.id in CARGOS_IGNORADOS for role in member.roles):
-                    canal_erro = bot.get_channel(LOG_ERRO)
-                    if canal_erro:
-                        await canal_erro.send(f"🛡️ **Protegido:** {member.mention} possui cargo ignorado.")
-                    return
+            try:
+                # 1. Carregar arquivo no Google AI
+                myfile = genai.upload_file(path)
+                regras = extrair_regras()
+                
+                # 2. Pedir julgamento à IA
+                prompt = f"Baseado nestas regras: {regras}. Analise este arquivo e diga se ele viola algo. Responda de forma curta: 'APROVADO' ou 'VIOLAÇÃO: [motivo]'."
+                response = model.generate_content([prompt, myfile])
+                
+                await msg_analise.edit(content=f"⚖️ **Veredito:** {response.text}")
 
-                try:
-                    await member.edit(nick=novo_nome)
-                    canal_sucesso = bot.get_channel(LOG_SUCESSO)
-                    if canal_sucesso:
-                        await canal_sucesso.send(f"✅ **Sucesso:** {member.mention} renomeado.")
-                except discord.Forbidden:
-                    canal_erro = bot.get_channel(LOG_ERRO)
-                    if canal_erro:
-                        await canal_erro.send(f"❌ **Erro:** Cargo do bot está abaixo do usuário.")
-            else:
-                canal_erro = bot.get_channel(LOG_ERRO)
-                if canal_erro:
-                    await canal_erro.send(f"⚠️ **Não encontrado:** ID `{user_id}` fora do server.")
-        except ValueError:
-            pass
+            except Exception as e:
+                await msg_analise.edit(content=f"❌ Erro na análise: {e}")
+            finally:
+                if os.path.exists(path):
+                    os.remove(path)
 
     await bot.process_commands(message)
 
-# 4. RODAR O BOT
-bot.run(TOKEN)
+bot.run(DISCORD_TOKEN)
