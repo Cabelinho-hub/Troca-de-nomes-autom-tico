@@ -26,7 +26,7 @@ LOG_CANAL_ID = 1417278749497364550
 ERRO_CANAL_ID = 1417278742052601939
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-pro')
 
 # --- 3. CONFIGURAÇÃO DO BOT DISCORD ---
 intents = discord.Intents.default()
