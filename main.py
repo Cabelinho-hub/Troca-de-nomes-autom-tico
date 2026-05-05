@@ -2,7 +2,23 @@ import discord
 from discord.ext import commands
 import os
 import psycopg2
+from flask import Flask
+from threading import Thread
 
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot Online!"
+
+def run_flask():
+    # O Render usa a porta 10000 por padrão ou a variável PORT
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.start()
 # --- CONFIGURAÇÕES VIA VARIÁVEIS DE AMBIENTE (RENDER) ---
 TOKEN = os.getenv('DISCORD_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL') # URL do Postgres do Render
