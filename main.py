@@ -4,6 +4,21 @@ import os
 import psycopg2
 from flask import Flask
 from threading import Thread
+from waitress import serve
+
+# --- 1. CONFIGURAÇÕES (DEVE VIR ANTES DE TUDO) ---
+TOKEN = os.getenv('DISCORD_TOKEN')
+DATABASE_URL = os.getenv('DATABASE_URL')
+BOT_ALVO_ID = int(os.getenv('BOT_ALVO_ID', 0))
+CANAL_CODIGOS_ID = int(os.getenv('CANAL_CODIGOS_ID', 0))
+CANAL_LOG_1_ID = int(os.getenv('CANAL_LOG_1_ID', 0))
+CANAL_LOG_2_ID = int(os.getenv('CANAL_LOG_2_ID', 0))
+
+# --- 2. INICIALIZAÇÃO DO BOT ---
+intents = discord.Intents.default()
+intents.messages = True
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 app = Flask('')
 
@@ -11,26 +26,21 @@ app = Flask('')
 def home():
     return "Bot Online!"
 
+# ... (aqui você mantém suas funções de banco de dados e comandos) ...
+
 def run_flask():
-    # O Render usa a porta 10000 por padrão ou a variável PORT
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    serve(app, host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run_flask)
+    t.daemon = True
     t.start()
-# --- CONFIGURAÇÕES VIA VARIÁVEIS DE AMBIENTE (RENDER) ---
-TOKEN = os.getenv('DISCORD_TOKEN')
-DATABASE_URL = os.getenv('DATABASE_URL') # URL do Postgres do Render
-BOT_ALVO_ID = int(os.getenv('1465393972569706609', 0))
-CANAL_CODIGOS_ID = int(os.getenv('1424602887991988384', 0))
-CANAL_LOG_1_ID = int(os.getenv('1485786544366424217', 0))
-CANAL_LOG_2_ID = int(os.getenv('1498147503453769738', 0))
 
-intents = discord.Intents.default()
-intents.messages = True
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+if __name__ == "__main__":
+    init_db()
+    keep_alive()
+    bot.run(TOKEN)
 
 # --- FUNÇÕES DO BANCO DE DATA (POSTGRESQL) ---
 def get_db_connection():
