@@ -6,57 +6,46 @@ from flask import Flask
 from threading import Thread
 from waitress import serve
 
-# --- 1. CONFIGURAÇÕES (DEVE VIR ANTES DE TUDO) ---
+# --- 1. CONFIGURAÇÕES E VARIÁVEIS ---
 TOKEN = os.getenv('DISCORD_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
-BOT_ALVO_ID = int(os.getenv('BOT_ALVO_ID', 0))
-CANAL_CODIGOS_ID = int(os.getenv('CANAL_CODIGOS_ID', 0))
-CANAL_LOG_1_ID = int(os.getenv('CANAL_LOG_1_ID', 0))
-CANAL_LOG_2_ID = int(os.getenv('CANAL_LOG_2_ID', 0))
 
-# --- 2. INICIALIZAÇÃO DO BOT ---
+def get_env_int(name):
+    value = os.getenv(name, '').strip()
+    return int(value) if value.isdigit() else 0
+
+BOT_ALVO_ID = get_env_int('BOT_ALVO_ID')
+CANAL_CODIGOS_ID = get_env_int('CANAL_CODIGOS_ID')
+CANAL_LOG_1_ID = get_env_int('CANAL_LOG_1_ID')
+CANAL_LOG_2_ID = get_env_int('CANAL_LOG_2_ID')
+
+# --- 2. INICIALIZAÇÃO DO BOT E FLASK ---
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
-
 app = Flask('')
 
 @app.route('/')
 def home():
     return "Bot Online!"
 
-# ... (aqui você mantém suas funções de banco de dados e comandos) ...
-
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    serve(app, host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
-
-if __name__ == "__main__":
-    init_db()
-    keep_alive()
-    bot.run(TOKEN)
-
-# --- FUNÇÕES DO BANCO DE DATA (POSTGRESQL) ---
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
-
+# --- 3. FUNÇÃO DO BANCO DE DADOS (DEFINIÇÃO) ---
 def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS ranking 
-                   (user_id TEXT PRIMARY KEY, quantidade INTEGER DEFAULT 0)''')
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS ranking 
+                       (user_id TEXT PRIMARY KEY, quantidade INTEGER DEFAULT 0)''')
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("Banco de dados conectado e pronto!")
+    except Exception as e:
+        print(f"Erro no Banco de Dados: {e}")
 
 def update_pontos(user_id):
-    conn = get_db_connection()
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO ranking (user_id, quantidade) VALUES (%s, 1)
@@ -69,55 +58,39 @@ def update_pontos(user_id):
     conn.close()
     return total
 
-# --- EVENTOS ---
+# --- 4. EVENTOS E COMANDOS ---
 @bot.event
 async def on_ready():
-    init_db()
-    print(f'Bot {bot.user} online e Banco de Dados conectado!')
+    print(f'Logado como {bot.user}')
 
 @bot.event
 async def on_message(message):
-    # Ignora mensagens do próprio bot
-    if message.author == bot.user:
-        return
-
-    # Lógica de leitura: canal específico + bot alvo
-    if message.channel.id == CANAL_CODIGOS_ID and message.author.id == BOT_ALVO_ID:
+    if message.author.id == BOT_ALVO_ID and message.channel.id == CANAL_CODIGOS_ID:
         if message.mentions:
             ultima_pessoa = message.mentions[-1]
             novo_total = update_pontos(str(ultima_pessoa.id))
-            
-            texto_log = f"{novo_total} pessoa(s) usou o código de {ultima_pessoa.mention}"
-            
-            # Envio para os dois canais de logs
-            for canal_id in [CANAL_LOG_1_ID, CANAL_LOG_2_ID]:
-                canal = bot.get_channel(canal_id)
-                if canal:
-                    await canal.send(texto_log)
-
+            texto = f"{novo_total} pessoa(s) usou o código de {ultima_pessoa.mention}"
+            for cid in [CANAL_LOG_1_ID, CANAL_LOG_2_ID]:
+                canal = bot.get_channel(cid)
+                if canal: await canal.send(texto)
     await bot.process_commands(message)
 
-# --- COMANDOS ---
 @bot.command()
 async def ver(ctx, user: discord.Member):
-    conn = get_db_connection()
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     cur = conn.cursor()
     cur.execute("SELECT quantidade FROM ranking WHERE user_id = %s", (str(user.id),))
     res = cur.fetchone()
     cur.close()
     conn.close()
-    
     pontos = res[0] if res else 0
-    await ctx.send(f"A pessoa {user.mention} possui {pontos} pontos registrados.")
+    await ctx.send(f"{user.mention} tem {pontos} pontos.")
 
-@bot.command()
-async def apagar(ctx, user: discord.Member):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM ranking WHERE user_id = %s", (str(user.id),))
-    conn.commit()
-    cur.close()
-    conn.close()
-    await ctx.send(f"Registros de {user.mention} deletados.")
+# --- 5. INICIALIZAÇÃO ---
+def run_flask():
+    serve(app, host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
-bot.run(TOKEN)
+if __name__ == "__main__":
+    init_db() # Agora ela existe e pode ser chamada!
+    Thread(target=run_flask, daemon=True).start()
+    bot.run(TOKEN)
