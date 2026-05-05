@@ -7,6 +7,7 @@ import asyncio
 from flask import Flask
 from threading import Thread
 from groq import Groq
+import time
 
 # --- WEB SERVER ---
 app = Flask('')
@@ -26,29 +27,46 @@ def keep_alive():
 ID_CANAL_LOGS = 1417278749497364550
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# --- FUNÇÃO DE REGRAS ---
+# --- FUNÇÃO DE REGRAS OTIMIZADA ---
 async def extrair_regras():
-    base_url = "https://gitbook.io"
+    # URL principal do seu Gitbook (Ajuste se necessário)
+    base_url = "https://razerp.gitbook.io/raze-roleplay" 
     headers = {'User-Agent': 'Mozilla/5.0'}
+    
     try:
         loop = asyncio.get_event_loop()
-        res = await loop.run_in_executor(None, lambda: requests.get(base_url, headers=headers, timeout=10))
+        res = await loop.run_in_executor(None, lambda: requests.get(base_url, headers=headers, timeout=15))
         soup = BeautifulSoup(res.text, 'html.parser')
         
         links = set()
         for a in soup.find_all('a', href=True):
             href = a['href']
-            if href.startswith('/raze-roleplay/'):
-                links.add("https://gitbook.io" + href)
+            # Filtro para encontrar sub-páginas do projeto
+            if "/raze-roleplay/" in href:
+                full_url = href if href.startswith('http') else "https://razerp.gitbook.io" + href
+                links.add(full_url)
         
         texto_completo = ""
-        for link in list(links)[:5]: # Lendo as 5 principais abas
-            r = await loop.run_in_executor(None, lambda: requests.get(link, headers=headers))
-            s = BeautifulSoup(r.text, 'html.parser')
-            texto_completo += s.get_text()
-        return texto_completo[:15000]
-    except:
-        return "Regras não disponíveis."
+        # Lendo as 15 principais abas para cobertura total
+        for link in list(links)[:15]: 
+            try:
+                r = await loop.run_in_executor(None, lambda: requests.get(link, headers=headers, timeout=10))
+                s = BeautifulSoup(r.text, 'html.parser')
+                
+                # Foca no conteúdo útil e limpa menus/rodapés
+                body_content = s.find('main') or s.find('body')
+                if body_content:
+                    for trash in body_content(["script", "style", "nav", "footer"]):
+                        trash.decompose()
+                    texto_completo += body_content.get_text(separator=' ') + "\n"
+            except:
+                continue
+
+        # Retorna até 30.000 caracteres para a IA ter o contexto máximo
+        return texto_completo[:30000]
+    except Exception as e:
+        print(f"Erro ao extrair regras: {e}")
+        return "Regras não disponíveis no momento."
 
 # --- BOT DISCORD ---
 intents = discord.Intents.default()
@@ -57,22 +75,21 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.command()
 async def julgar(ctx, *, denuncia: str = None):
-    # Se não houver texto, mas houver imagem, o Groq Vision poderia ser usado (requer código extra)
     if not denuncia and not ctx.message.reference:
         return await ctx.send("❌ Descreva a situação ou responda a uma mensagem para eu julgar.")
 
-    msg_analise = await ctx.send("⚖️ Consultando o regulamento do Raze RP via Groq...")
+    msg_analise = await ctx.send("⚖️ Consultando o regulamento completo do Raze RP...")
     
     try:
+        # Busca as regras ampliadas
         regras = await extrair_regras()
         situacao = denuncia
         
-        # Se estiver respondendo a alguém, pega o texto da pessoa
         if ctx.message.reference:
             ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             situacao = f"Contexto da denúncia: {denuncia or ''}. Mensagem original: {ref_msg.content}"
 
-        # Chamada para a Groq (Llama 3)
+        # Chamada para a Groq com Prompt de Auditoria Geral
         chat_completion = client.chat.completions.create(
             messages=[
                 {
@@ -94,7 +111,7 @@ async def julgar(ctx, *, denuncia: str = None):
                 }
             ],
             model="llama-3.3-70b-versatile",
-            temperature=0.1, # Deixa a IA mais precisa e menos "criativa"
+            temperature=0.1,
         )
 
         veredito = chat_completion.choices[0].message.content
@@ -107,7 +124,7 @@ async def julgar(ctx, *, denuncia: str = None):
             await msg_analise.edit(content=f"⚖️ **Veredito:**\n{veredito}")
 
     except Exception as e:
-        await msg_analise.edit(content=f"❌ Erro na Groq: {e}")
+        await msg_analise.edit(content=f"❌ Erro no processamento: {e}")
 
 if __name__ == "__main__":
     keep_alive()
