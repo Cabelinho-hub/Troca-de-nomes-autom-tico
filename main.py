@@ -27,10 +27,17 @@ def keep_alive():
 ID_CANAL_LOGS = 1417278749497364550
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# --- FUNÇÃO DE REGRAS OTIMIZADA ---
+# Sistema de Cache para as regras não travarem o bot
+cache_regras = {"texto": "", "ultima_atualizacao": 0}
+
+# --- FUNÇÃO DE REGRAS COM CACHE E LEITURA AMPLIADA ---
 async def extrair_regras():
-    # URL principal do seu Gitbook (Ajuste se necessário)
-    base_url = "https://razerp.gitbook.io/raze-roleplay" 
+    agora = time.time()
+    # Se já leu as regras nos últimos 60 minutos, usa o que está na memória
+    if cache_regras["texto"] and (agora - cache_regras["ultima_atualizacao"] < 3600):
+        return cache_regras["texto"]
+
+    base_url = "https://gitbook.io" 
     headers = {'User-Agent': 'Mozilla/5.0'}
     
     try:
@@ -41,32 +48,32 @@ async def extrair_regras():
         links = set()
         for a in soup.find_all('a', href=True):
             href = a['href']
-            # Filtro para encontrar sub-páginas do projeto
             if "/raze-roleplay/" in href:
                 full_url = href if href.startswith('http') else "https://razerp.gitbook.io" + href
                 links.add(full_url)
         
         texto_completo = ""
-        # Lendo as 15 principais abas para cobertura total
-        for link in list(links)[:15]: 
+        # Lendo as 20 principais abas para cobertura total
+        for link in list(links)[:20]: 
             try:
                 r = await loop.run_in_executor(None, lambda: requests.get(link, headers=headers, timeout=10))
                 s = BeautifulSoup(r.text, 'html.parser')
-                
-                # Foca no conteúdo útil e limpa menus/rodapés
                 body_content = s.find('main') or s.find('body')
                 if body_content:
                     for trash in body_content(["script", "style", "nav", "footer"]):
                         trash.decompose()
-                    texto_completo += body_content.get_text(separator=' ') + "\n"
+                    texto_completo += f"\n--- SEÇÃO: {link.split('/')[-1].upper()} ---\n"
+                    texto_completo += body_content.get_text(separator=' ', strip=True) + "\n"
             except:
                 continue
 
-        # Retorna até 30.000 caracteres para a IA ter o contexto máximo
-        return texto_completo[:30000]
+        # Salva no cache
+        cache_regras["texto"] = texto_completo[:40000]
+        cache_regras["ultima_atualizacao"] = agora
+        return cache_regras["texto"]
     except Exception as e:
         print(f"Erro ao extrair regras: {e}")
-        return "Regras não disponíveis no momento."
+        return cache_regras["texto"] or "Regras não disponíveis."
 
 # --- BOT DISCORD ---
 intents = discord.Intents.default()
@@ -78,10 +85,9 @@ async def julgar(ctx, *, denuncia: str = None):
     if not denuncia and not ctx.message.reference:
         return await ctx.send("❌ Descreva a situação ou responda a uma mensagem para eu julgar.")
 
-    msg_analise = await ctx.send("⚖️ Consultando o regulamento completo do Raze RP...")
+    msg_analise = await ctx.send("⚖️ Consultando o regulamento e gerando veredito detalhado...")
     
     try:
-        # Busca as regras ampliadas
         regras = await extrair_regras()
         situacao = denuncia
         
@@ -89,25 +95,23 @@ async def julgar(ctx, *, denuncia: str = None):
             ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             situacao = f"Contexto da denúncia: {denuncia or ''}. Mensagem original: {ref_msg.content}"
 
-        # Chamada para a Groq com Prompt de Auditoria Geral
+        # Chamada para a Groq
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "Você é o Auditor Supremo do Raze RP. Sua tarefa é analisar denúncias de forma técnica e imparcial.\n"
-                        f"BASE DE REGRAS OFICIAL: {regras}\n\n"
+                        "Você é o Auditor Supremo do Raze RP. Analise denúncias de forma técnica.\n"
+                        f"BASE DE REGRAS: {regras}\n\n"
                         "INSTRUÇÕES:\n"
-                        "1. Não se limite a VDM ou RDM. Verifique MetaGaming, PowerGaming, Amor à vida, Postura, "
-                        "ou QUALQUER outra infração presente na base de regras acima.\n"
-                        "2. Se houver infração, cite o nome da regra e explique o motivo técnico.\n"
-                        "3. Se a conduta não infringir nenhuma regra, explique por que ela é permitida.\n"
-                        "4. Seja direto e não invente regras que não estão no texto fornecido."
+                        "1. Analise TODAS as infrações (Meta, Power, Amor à vida, Ilegal, etc).\n"
+                        "2. Cite o nome da regra e o motivo técnico.\n"
+                        "3. Seja imparcial e direto."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": f"Analise detalhadamente a seguinte situação perante TODAS as regras do servidor: {situacao}",
+                    "content": f"Julgue a situação perante as regras: {situacao}",
                 }
             ],
             model="llama-3.3-70b-versatile",
@@ -115,16 +119,28 @@ async def julgar(ctx, *, denuncia: str = None):
         )
 
         veredito = chat_completion.choices[0].message.content
-        
         canal_log = bot.get_channel(ID_CANAL_LOGS)
+
+        # Função interna para enviar o texto sem estourar o limite de 2000 caracteres
+        async def enviar_resultado(destino, texto):
+            if len(texto) <= 4000:
+                embed = discord.Embed(title="⚖️ Relatório de Julgamento", description=texto, color=0x2b2d31)
+                embed.set_footer(text=f"Solicitado por: {ctx.author.name}")
+                await destino.send(embed=embed)
+            else:
+                for i in range(0, len(texto), 1900):
+                    await destino.send(f"⚠️ **Parte {int(i/1900)+1}**\n{texto[i:i+1900]}")
+
+        # Envio final
         if canal_log:
-            await canal_log.send(f"⚠️ **JULGAMENTO GROQ**\nSolicitado por: {ctx.author.mention}\n\n{veredito}")
-            await msg_analise.edit(content="✅ Julgamento concluído! Veja o canal de logs.")
+            await enviar_resultado(canal_log, veredito)
+            await msg_analise.edit(content="✅ **Julgamento concluído!** Veja o canal de logs.")
         else:
-            await msg_analise.edit(content=f"⚖️ **Veredito:**\n{veredito}")
+            await msg_analise.delete()
+            await enviar_resultado(ctx, veredito)
 
     except Exception as e:
-        await msg_analise.edit(content=f"❌ Erro no processamento: {e}")
+        await msg_analise.edit(content=f"❌ Erro no processamento: {str(e)[:1000]}")
 
 if __name__ == "__main__":
     keep_alive()
