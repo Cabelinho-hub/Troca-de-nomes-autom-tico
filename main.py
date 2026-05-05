@@ -3,7 +3,22 @@ from discord.ext import commands
 import google.generativeai as genai
 import os
 import logging
+from flask import Flask
+from threading import Thread
+import os
 
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot está vivo!"
+
+def run():
+  app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 # 1. Configuração de Variáveis de Ambiente (Render)
 TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_KEY")
