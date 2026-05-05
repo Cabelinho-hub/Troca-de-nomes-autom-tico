@@ -77,16 +77,25 @@ async def julgar(ctx, *, denuncia: str = None):
             messages=[
                 {
                     "role": "system",
-                    "content": f"Você é um Administrador sênior do Raze RP. Use estas regras: {regras}",
+                    "content": (
+                        "Você é o Auditor Supremo do Raze RP. Sua tarefa é analisar denúncias de forma técnica e imparcial.\n"
+                        f"BASE DE REGRAS OFICIAL: {regras}\n\n"
+                        "INSTRUÇÕES:\n"
+                        "1. Não se limite a VDM ou RDM. Verifique MetaGaming, PowerGaming, Amor à vida, Postura, "
+                        "ou QUALQUER outra infração presente na base de regras acima.\n"
+                        "2. Se houver infração, cite o nome da regra e explique o motivo técnico.\n"
+                        "3. Se a conduta não infringir nenhuma regra, explique por que ela é permitida.\n"
+                        "4. Seja direto e não invente regras que não estão no texto fornecido."
+                    ),
                 },
                 {
                     "role": "user",
-                    "content": f"Julgue a seguinte situação e diga se houve VDM, RDM ou outra infração: {situacao}",
+                    "content": f"Analise detalhadamente a seguinte situação perante TODAS as regras do servidor: {situacao}",
                 }
             ],
             model="llama-3.3-70b-versatile",
+            temperature=0.1, # Deixa a IA mais precisa e menos "criativa"
         )
-
         veredito = chat_completion.choices[0].message.content
         
         canal_log = bot.get_channel(ID_CANAL_LOGS)
