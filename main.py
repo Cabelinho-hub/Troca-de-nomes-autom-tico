@@ -7,7 +7,6 @@ import asyncio
 from flask import Flask
 from threading import Thread
 from groq import Groq
-async def extrair_regras():
     
 # --- WEB SERVER ---
 app = Flask('')
@@ -29,7 +28,7 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 # --- FUNÇÃO DE REGRAS ---
 async def extrair_regras():
-    # Substitua pela URL principal do seu Gitbook
+    
     base_url = "https://razerp.gitbook.io/raze-roleplay" 
     headers = {'User-Agent': 'Mozilla/5.0'}
     
