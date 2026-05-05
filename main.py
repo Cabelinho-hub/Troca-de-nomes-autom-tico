@@ -10,13 +10,22 @@ import os
 app = Flask('')
 
 @app.route('/')
-def home():
-    return "Bot está vivo!"
+def health_check():
+    return "Bot está online!", 200
 
 def run():
-    # O Render passa a porta automaticamente pela variável 'PORT'
+    # O Render exige que usemos a porta que ele fornece na variável PORT
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
+
+# Inicia o servidor Flask em uma thread separada
+Thread(target=run).start()
+
+# Inicia o Bot do Discord
+try:
+    bot.run(TOKEN)
+except Exception as e:
+    print(f"Erro ao iniciar o bot: {e}")
     
 def keep_alive():
     t = Thread(target=run)
