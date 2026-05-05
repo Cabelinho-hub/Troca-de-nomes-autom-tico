@@ -7,7 +7,8 @@ import asyncio
 from flask import Flask
 from threading import Thread
 from groq import Groq
-
+async def extrair_regras():
+    
 # --- WEB SERVER ---
 app = Flask('')
 @app.route('/')
@@ -28,27 +29,46 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 # --- FUNÇÃO DE REGRAS ---
 async def extrair_regras():
-    base_url = "https://gitbook.io"
+    # Substitua pela URL principal do seu Gitbook
+    base_url = "https://razerp.gitbook.io/raze-roleplay" 
     headers = {'User-Agent': 'Mozilla/5.0'}
+    
     try:
         loop = asyncio.get_event_loop()
-        res = await loop.run_in_executor(None, lambda: requests.get(base_url, headers=headers, timeout=10))
+        res = await loop.run_in_executor(None, lambda: requests.get(base_url, headers=headers, timeout=15))
         soup = BeautifulSoup(res.text, 'html.parser')
         
         links = set()
+        # Captura links que parecem ser sub-páginas do seu Gitbook
         for a in soup.find_all('a', href=True):
             href = a['href']
-            if href.startswith('/raze-roleplay/'):
-                links.add("https://gitbook.io" + href)
+            # Ajuste o filtro abaixo se os links do seu Gitbook tiverem outro padrão
+            if "/raze-roleplay/" in href:
+                full_url = href if href.startswith('http') else "https://gitbook.io" + href
+                links.add(full_url)
         
         texto_completo = ""
-        for link in list(links)[:5]: # Lendo as 5 principais abas
-            r = await loop.run_in_executor(None, lambda: requests.get(link, headers=headers))
-            s = BeautifulSoup(r.text, 'html.parser')
-            texto_completo += s.get_text()
-        return texto_completo[:15000]
-    except:
-        return "Regras não disponíveis."
+        # Aumentamos para as 15 principais abas para pegar o conteúdo todo
+        for link in list(links)[:15]: 
+            try:
+                r = await loop.run_in_executor(None, lambda: requests.get(link, headers=headers, timeout=10))
+                s = BeautifulSoup(r.text, 'html.parser')
+                
+                # Focamos no conteúdo principal (geralmente dentro da tag <main> ou <body>)
+                body_content = s.find('main') or s.find('body')
+                if body_content:
+                    # Removemos scripts e estilos para economizar espaço
+                    for script_or_style in body_content(["script", "style", "nav", "footer"]):
+                        script_or_style.decompose()
+                    texto_completo += body_content.get_text(separator=' ') + "\n"
+            except:
+                continue
+
+        # Aumentamos para 30.000 caracteres para dar mais contexto à IA
+        return texto_completo[:30000]
+    except Exception as e:
+        print(f"Erro ao extrair regras: {e}")
+        return "Regras não disponíveis no momento."
 
 # --- BOT DISCORD ---
 intents = discord.Intents.default()
