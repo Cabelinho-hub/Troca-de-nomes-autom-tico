@@ -78,42 +78,51 @@ def get_ranking(dias=None):
 # --- 2. LÓGICA DE IDENTIFICAÇÃO (Logs) ---
 @bot.event
 async def on_message(message):
-    if message.author.id == BOT_ALVO_ID:
-        content = message.content
-        if message.embeds:
-            for e in message.embeds: content += f" {e.description or ''}"
+    # 1. Filtro básico
+    if message.author.id != BOT_ALVO_ID or message.channel.id != CANAL_CODIGOS_ID:
+        return
+
+    # 2. Coleta todo o texto (da mensagem e de embeds)
+    full_text = message.content
+    if message.embeds:
+        for embed in message.embeds:
+            if embed.description: full_text += f" {embed.description}"
+            if embed.fields:
+                for field in embed.fields: full_text += f" {field.value}"
+
+    # 3. Busca todos os IDs mencionados no formato <@123...> ou <@!123...>
+    all_mentions = re.findall(r'<@!?(\d+)>', full_text)
+
+    if len(all_mentions) >= 2:
+        quem_usou = all_mentions[0]
+        quem_ganhou = all_mentions[-1]
         
-        # Regex para achar menções (@user) e códigos alfanuméricos
-        mentions = re.findall(r'<@!?(\d+)>', content)
-        codigos = re.findall(r'\b[A-Z0-9]{5,}\b', content)
+        # Tenta pegar o código (palavras com letras e números)
+        codigo_match = re.search(r'\b([A-Z0-9]{4,})\b', full_text)
+        codigo_texto = codigo_match.group(1) if codigo_match else "S/C"
 
-        if len(mentions) >= 2 and codigos:
-            if registrar_uso(mentions[0], codigos[0], mentions[-1]):
-                log_ch = bot.get_channel(CANAL_LOGS_ID)
-                if log_ch: await log_ch.send(f"✅ <@{mentions[0]}> usou `{codigos[0]}` (<@{mentions[-1]}>).")
-    await bot.process_commands(message)
-
-# --- 3. PAINEL E RANKING INTERATIVO ---
-class RankingView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    
-    async def enviar_ranking(self, interaction, titulo, dias):
-        dados = get_ranking(dias)
-        msg = f"🏆 **{titulo}**\n\n"
-        if dados:
-            for i, (uid, qtd) in enumerate(dados):
-                msg += f"{i+1}º | <@{uid}> - {qtd} pts\n"
-        else:
-            msg += "Nenhum dado encontrado no período."
-        await interaction.response.send_message(msg, ephemeral=False)
-
-    @discord.ui.button(label="Semanal", style=discord.ButtonStyle.primary, custom_id="r1")
-    async def sem(self, i: discord.Interaction, b: discord.ui.Button): await self.enviar_ranking(i, "Rank Semanal", 7)
-    @discord.ui.button(label="Quinzenal", style=discord.ButtonStyle.success, custom_id="r2")
-    async def qui(self, i: discord.Interaction, b: discord.ui.Button): await self.enviar_ranking(i, "Rank Quinzenal", 15)
-    @discord.ui.button(label="Mensal", style=discord.ButtonStyle.danger, custom_id="r3")
-    async def men(self, i: discord.Interaction, b: discord.ui.Button): await self.enviar_ranking(i, "Rank Mensal", 30)
-
+        # 4. Salva no Banco e MENCIONA no log
+        try:
+            novo_total = update_pontos(quem_ganhou) # Sua função de DB
+            
+            canal_log = bot.get_channel(CANAL_LOG_SUCESSO_ID)
+            if canal_log:
+                # O USO DE f"<@{id}>" garante a menção mesmo que o bot não conheça o usuário
+                await canal_log.send(
+                    f"✅ **Ponto Registrado!**\n"
+                    f"👤 **Usou:** <@{quem_usou}>\n"
+                    f"🏆 **Ganhou:** <@{quem_ganhou}>\n"
+                    f"🔑 **Código:** `{codigo_texto}`\n"
+                    f"📊 **Total de <@{quem_ganhou}>:** {novo_total} pontos"
+                )
+        except Exception as e:
+            print(f"Erro ao processar: {e}")
+    else:
+        # Log de erro caso ele não ache as 2 pessoas
+        canal_erro = bot.get_channel(CANAL_LOG_ERRO_ID)
+        if canal_erro:
+            await canal_erro.send(f"⚠️ Identifiquei uma mensagem, mas não encontrei as menções necessárias.\n**Texto lido:** {full_text[:100]}...")
+            
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_painel(ctx): # Adicionado 'async' aqui
