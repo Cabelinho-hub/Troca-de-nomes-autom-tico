@@ -107,8 +107,8 @@ class RankingView(discord.ui.View):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-def setup_painel(ctx):
-    canal_painel = bot.get_channel(CANAL_PAINEL_ID)
+async def setup_painel(ctx): # Adicionado 'async' aqui
+    canal_painel = bot.get_channel(CANAL_PAINEL_ID) or await bot.fetch_channel(CANAL_PAINEL_ID)
     if canal_painel:
         view = RankingView()
         embed = discord.Embed(
@@ -119,7 +119,7 @@ def setup_painel(ctx):
         await canal_painel.send(embed=embed, view=view)
         await ctx.send("✅ Painel enviado com sucesso!")
     else:
-        await ctx.send("❌ Não consegui encontrar o canal. Verifique o ID nas variáveis de ambiente.")
+        await ctx.send("❌ Não consegui encontrar o canal. Verifique o ID.") 
         
 @bot.command()
 @commands.has_permissions(administrator=True)
