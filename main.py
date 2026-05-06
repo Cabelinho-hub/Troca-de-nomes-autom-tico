@@ -8,11 +8,20 @@ from threading import Thread
 from waitress import serve
 import re
 
-# --- 1. CONFIGURAÇÕES E BANCO (PostgreSQL) ---
+# --- 1. CONFIGURAÇÕES E VARIÁVEIS (No topo do arquivo) ---
 TOKEN = os.getenv('DISCORD_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
-BOT_ALVO_ID = int(os.getenv('BOT_ALVO_ID', 0))
-CANAL_LOGS_ID = int(os.getenv('CANAL_LOGS_ID', 0)) 
+
+def get_env_int(name):
+    value = os.getenv(name, '').strip()
+    return int(value) if value.isdigit() else 0
+
+BOT_ALVO_ID = get_env_int('BOT_ALVO_ID')
+CANAL_CODIGOS_ID = get_env_int('CANAL_CODIGOS_ID')
+CANAL_PAINEL_ID = get_env_int('CANAL_PAINEL_ID')      # <-- ESSA LINHA É A QUE FALTA
+CANAL_LOG_RANK_ID = get_env_int('CANAL_LOG_RANK_ID') # Verifique se esta também existe
+CANAL_LOG_SUCESSO_ID = get_env_int('CANAL_LOG_SUCESSO_ID')
+CANAL_LOG_ERRO_ID = get_env_int('CANAL_LOG_ERRO_ID')
 
 # Pool de conexões para garantir performance e estabilidade no banco
 db_pool = psycopg2.pool.SimpleConnectionPool(1, 10, DATABASE_URL, sslmode='require')
