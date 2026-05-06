@@ -107,6 +107,22 @@ class RankingView(discord.ui.View):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
+def setup_painel(ctx):
+    canal_painel = bot.get_channel(CANAL_PAINEL_ID)
+    if canal_painel:
+        view = RankingView()
+        embed = discord.Embed(
+            title="🏆 Painel de Rankings",
+            description="Clique nos botões abaixo para visualizar as classificações atualizadas.",
+            color=discord.Color.blue()
+        )
+        await canal_painel.send(embed=embed, view=view)
+        await ctx.send("✅ Painel enviado com sucesso!")
+    else:
+        await ctx.send("❌ Não consegui encontrar o canal. Verifique o ID nas variáveis de ambiente.")
+        
+@bot.command()
+@commands.has_permissions(administrator=True)
 async def painel(ctx):
     await ctx.send("📊 **Painel de Rankings**", view=RankingView())
 
