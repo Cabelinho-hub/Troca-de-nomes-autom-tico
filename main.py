@@ -153,7 +153,7 @@ async def on_message(message):
         ids_encontrados = re.findall(r'(\d{17,20})', full_text)
 
         # 5. BUSCA PELO CÓDIGO (Palavra grande em maiúsculo)
-        cod_match = re.search(r'\b([A-Z0-9]{8,20})\b', full_text)
+        cod_match = re.search(r'\b(RAZE[A-Z0-9]+)\b', full_text, re.IGNORECASE)
         codigo = cod_match.group(1) if cod_match else "N/A"
 
         if len(ids_encontrados) >= 2:
