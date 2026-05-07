@@ -84,14 +84,14 @@ async def on_message(message):
 
     # Verifique se essa condição está correta (use print para debugar)
      if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID):
+        # 3. Tudo aqui dentro deve ter 8 espaços de recuo
         full_text = ""
-    # 2. Coleta todo o texto (da mensagem e de embeds)
-    full_text = message.content
-    if message.embeds:
-        for embed in message.embeds:
-            if embed.description: full_text += f" {embed.description}"
-            if embed.fields:
-                for field in embed.fields: full_text += f" {field.value}"
+        full_text += message.content
+        
+        if message.embeds:
+            for embed in message.embeds:
+                if embed.description:
+                    full_text += f" {embed.description}"
 
     # 3. Busca todos os IDs mencionados no formato <@123...> ou <@!123...>
     all_mentions = re.findall(r'<@!?(\d+)>', full_text)
