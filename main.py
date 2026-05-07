@@ -83,8 +83,8 @@ async def on_message(message):
         return
 
     # Verifique se essa condição está correta (use print para debugar)
-    if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID)
-
+     if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID):
+        full_text = ""
     # 2. Coleta todo o texto (da mensagem e de embeds)
     full_text = message.content
     if message.embeds:
