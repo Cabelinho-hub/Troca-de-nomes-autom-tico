@@ -183,6 +183,10 @@ async def on_message(message):
     # Garante que os comandos (!ver, etc) continuem funcionando
     await bot.process_commands(message)
 
+@bot.command()
+async def testar(ctx):
+    await ctx.send(f"Status da Intent: {bot.intents.message_content}")
+    
 # --- 5. FLASK (KEEP ALIVE) ---
 app = Flask('')
 @app.route('/')
