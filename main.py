@@ -121,62 +121,61 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # 1. Filtro de segurança
     if message.author.id == bot.user.id:
         return
 
-    # 2. Verifica se é o bot certo no canal certo
+    # 1. Verifica IDs do Bot Alvo e do Canal
     if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID):
         
-        # JUNTA TUDO: Texto, Embeds e até Menções diretas
-        full_text = str(message.content or "")
+        # 2. Captura TUDO, inclusive de Webhooks e Interações
+        full_text = ""
         
-        # Puxa dados de Embeds (Título, Descrição, Campos, Rodapé)
+        # Se houver texto normal
+        if message.content:
+            full_text += f" {message.content} "
+            
+        # FORÇA a leitura de cada pedaço do Embed (Título, Descrição, Campos, Rodapé)
         if message.embeds:
             for e in message.embeds:
-                full_text += f" {e.title} {e.description} {e.footer.text} "
+                embed_data = [e.title, e.description, e.footer.text, e.author.name]
                 if e.fields:
                     for f in e.fields:
-                        full_text += f" {f.name} {f.value} "
+                        embed_data.extend([f.name, f.value])
+                # Filtra apenas o que não é vazio e junta
+                full_text += " ".join([str(p) for p in embed_data if p]) + " "
 
-        # ADICIONAL: Se o bot alvo usar Webhooks, o conteúdo pode estar em message.clean_content
-        full_text += f" {message.clean_content} "
+        # 3. Se ainda assim estiver vazio, tenta ler os componentes (botões/menus)
+        if not full_text.strip():
+            full_text = " ".join([str(comp) for comp in message.components])
 
-        # 3. BUSCA POR IDs (Qualquer sequência de 17 a 20 números)
-        # Isso ignora se está com @ ou não. Se houver um ID, ele pega.
-        mentions = re.findall(r'(\d{17,20})', full_text)
+        # 4. BUSCA POR IDs (Qualquer número de 17 a 20 dígitos)
+        # O segredo é buscar o número puro, já que o texto da menção não está vindo
+        ids_encontrados = re.findall(r'(\d{17,20})', full_text)
 
-        # 4. BUSCA PELO CÓDIGO
+        # 5. BUSCA PELO CÓDIGO (Palavra grande em maiúsculo)
         cod_match = re.search(r'\b([A-Z0-9]{8,20})\b', full_text)
         codigo = cod_match.group(1) if cod_match else "N/A"
 
-        if len(mentions) >= 2:
-            # O primeiro ID que aparecer na log é quem USOU
-            # O segundo (ou último) é o STREAMER
-            quem_usou = mentions[0]
-            quem_ganhou = mentions[-1]
+        if len(ids_encontrados) >= 2:
+            usou = ids_encontrados[0]
+            ganhou = ids_encontrados[-1]
 
-            try:
-                total = registrar_ponto(quem_usou, quem_ganhou, codigo)
-                
-                canal_sucesso = bot.get_channel(CANAL_LOG_SUCESSO_ID) or await bot.fetch_channel(CANAL_LOG_SUCESSO_ID)
-                if canal_sucesso:
-                    await canal_sucesso.send(
-                        f"✅ **Ponto Registrado com Sucesso!**\n"
-                        f"👤 **Usuário:** <@{quem_usou}>\n"
-                        f"🎬 **Streamer:** <@{quem_ganhou}>\n"
-                        f"🔑 **Código:** `{codigo}`\n"
-                        f"📊 **Total do Streamer:** `{total}` pontos"
-                    )
-            except Exception as e:
-                print(f"Erro no banco: {e}")
+            total = registrar_ponto(usou, ganhou, codigo)
+            
+            canal_sucesso = bot.get_channel(CANAL_LOG_SUCESSO_ID) or await bot.fetch_channel(CANAL_LOG_SUCESSO_ID)
+            if canal_sucesso:
+                await canal_sucesso.send(
+                    f"✅ **Ponto Registrado!**\n"
+                    f"👤 **Usou:** <@{usou}>\n"
+                    f"🎬 **Streamer:** <@{ganhou}>\n"
+                    f"🔑 **Código:** `{codigo}`\n"
+                    f"📈 **Total:** `{total}` pontos"
+                )
         else:
-            # DEBUG REAL: Se ele cair aqui, vamos ver o que ele realmente 'viu'
+            # Esse log agora vai mostrar se o problema é que o texto REALMENTE não existe
             log_erro = bot.get_channel(CANAL_LOG_ERRO_ID) or await bot.fetch_channel(CANAL_LOG_ERRO_ID)
             if log_erro:
-                # Vamos converter em string pura para evitar erros de visualização
-                safe_text = full_text.replace("<", "[").replace(">", "]")
-                await log_erro.send(f"⚠️ IDs não encontrados.\n**Texto capturado pelo Bot:**\n`{safe_text[:150]}`")
+                await log_erro.send(f"⚠️ IDs não encontrados. Tamanho do texto lido: `{len(full_text)}` caracteres.")
 
     await bot.process_commands(message)
 
