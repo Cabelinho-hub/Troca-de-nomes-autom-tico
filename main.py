@@ -121,66 +121,63 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # Ignora o próprio bot
+    # 1. Filtro de segurança
     if message.author.id == bot.user.id:
         return
 
-    # 1. Verifica se é o bot alvo no canal configurado
+    # 2. Verifica se é o bot certo no canal certo
     if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID):
-        # Tenta pegar texto do conteúdo principal e de todos os lugares do Embed
+        
+        # JUNTA TUDO: Texto, Embeds e até Menções diretas
         full_text = str(message.content or "")
         
+        # Puxa dados de Embeds (Título, Descrição, Campos, Rodapé)
         if message.embeds:
-            for em in message.embeds:
-                # Junta descrição, título e campos em uma única string
-                partes = [em.title, em.description]
-                if em.fields:
-                    for f in em.fields:
-                        partes.append(f.value)
-                full_text += " " + " ".join([str(p) for p in partes if p])
+            for e in message.embeds:
+                full_text += f" {e.title} {e.description} {e.footer.text} "
+                if e.fields:
+                    for f in e.fields:
+                        full_text += f" {f.name} {f.value} "
 
-        # Se após olhar tudo o texto ainda for vazio, avisa sobre a Intent
-        if not full_text.strip():
-            log_erro = bot.get_channel(CANAL_LOG_ERRO_ID) or await bot.fetch_channel(CANAL_LOG_ERRO_ID)
-            if log_erro:
-                await log_erro.send("❌ O texto chegou vazio. Verifique se a 'Message Content Intent' está ativa no site e no código.")
-            return
+        # ADICIONAL: Se o bot alvo usar Webhooks, o conteúdo pode estar em message.clean_content
+        full_text += f" {message.clean_content} "
 
-        # 2. Busca IDs de usuários (números de 17 a 20 dígitos)
-        # Isso funciona mesmo que a mensagem não tenha o símbolo <@>
+        # 3. BUSCA POR IDs (Qualquer sequência de 17 a 20 números)
+        # Isso ignora se está com @ ou não. Se houver um ID, ele pega.
         mentions = re.findall(r'(\d{17,20})', full_text)
 
-        # 3. Busca o Código (Palavras maiúsculas com números de 8 a 20 caracteres)
+        # 4. BUSCA PELO CÓDIGO
         cod_match = re.search(r'\b([A-Z0-9]{8,20})\b', full_text)
         codigo = cod_match.group(1) if cod_match else "N/A"
 
         if len(mentions) >= 2:
-            quem_usou = mentions[0]    # Primeiro ID encontrado
-            quem_ganhou = mentions[-1]  # Último ID encontrado (Streamer)
+            # O primeiro ID que aparecer na log é quem USOU
+            # O segundo (ou último) é o STREAMER
+            quem_usou = mentions[0]
+            quem_ganhou = mentions[-1]
 
             try:
-                # Salva no banco de dados e pega o total
                 total = registrar_ponto(quem_usou, quem_ganhou, codigo)
                 
                 canal_sucesso = bot.get_channel(CANAL_LOG_SUCESSO_ID) or await bot.fetch_channel(CANAL_LOG_SUCESSO_ID)
                 if canal_sucesso:
-                    # Layout que você gostou:
                     await canal_sucesso.send(
-                        f"✅ **Código Identificado!**\n"
-                        f"👤 **Quem usou:** <@{quem_usou}>\n"
+                        f"✅ **Ponto Registrado com Sucesso!**\n"
+                        f"👤 **Usuário:** <@{quem_usou}>\n"
                         f"🎬 **Streamer:** <@{quem_ganhou}>\n"
                         f"🔑 **Código:** `{codigo}`\n"
-                        f"📈 **Total do Streamer:** `{total}` pontos"
+                        f"📊 **Total do Streamer:** `{total}` pontos"
                     )
             except Exception as e:
-                print(f"Erro ao salvar no banco: {e}")
+                print(f"Erro no banco: {e}")
         else:
-            # Se não achar os IDs, mostra o que ele conseguiu ler para ajuste
+            # DEBUG REAL: Se ele cair aqui, vamos ver o que ele realmente 'viu'
             log_erro = bot.get_channel(CANAL_LOG_ERRO_ID) or await bot.fetch_channel(CANAL_LOG_ERRO_ID)
             if log_erro:
-                await log_erro.send(f"⚠️ Não consegui extrair os membros.\n**Texto capturado:** `{full_text[:150]}`")
+                # Vamos converter em string pura para evitar erros de visualização
+                safe_text = full_text.replace("<", "[").replace(">", "]")
+                await log_erro.send(f"⚠️ IDs não encontrados.\n**Texto capturado pelo Bot:**\n`{safe_text[:150]}`")
 
-    # Garante que os comandos (!ver, etc) continuem funcionando
     await bot.process_commands(message)
 
 @bot.command()
