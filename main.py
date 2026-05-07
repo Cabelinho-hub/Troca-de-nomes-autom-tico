@@ -121,39 +121,50 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    # Ignora o próprio bot
     if message.author.id == bot.user.id:
         return
 
-    # 1. Verifica se é o bot certo no canal certo
+    # 1. Verifica se é o bot alvo no canal configurado
     if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID):
-        full_text = message.content or ""
+        # Tenta pegar texto do conteúdo principal e de todos os lugares do Embed
+        full_text = str(message.content or "")
         
-        # Captura texto de Embeds (caso a imagem seja um embed)
         if message.embeds:
             for em in message.embeds:
-                full_text += f" {em.description} "
-                for f in em.fields: full_text += f" {f.value} "
+                # Junta descrição, título e campos em uma única string
+                partes = [em.title, em.description]
+                if em.fields:
+                    for f in em.fields:
+                        partes.append(f.value)
+                full_text += " " + " ".join([str(p) for p in partes if p])
 
-        # 2. Busca IDs de menção (o formato <@ID>)
-        # Se o bot alvo manda o nome sem mencionar (texto puro), precisaremos de outra lógica.
-        # Mas se ele menciona, este regex pega:
-        mentions = re.findall(r'<@!?(\d+)>', full_text)
+        # Se após olhar tudo o texto ainda for vazio, avisa sobre a Intent
+        if not full_text.strip():
+            log_erro = bot.get_channel(CANAL_LOG_ERRO_ID) or await bot.fetch_channel(CANAL_LOG_ERRO_ID)
+            if log_erro:
+                await log_erro.send("❌ O texto chegou vazio. Verifique se a 'Message Content Intent' está ativa no site e no código.")
+            return
 
-        # 3. Busca o Código (Palavra grande em maiúsculo, ex: RAZEVWTECSU0)
-        # Busca palavras com letras e números de pelo menos 8 caracteres
+        # 2. Busca IDs de usuários (números de 17 a 20 dígitos)
+        # Isso funciona mesmo que a mensagem não tenha o símbolo <@>
+        mentions = re.findall(r'(\d{17,20})', full_text)
+
+        # 3. Busca o Código (Palavras maiúsculas com números de 8 a 20 caracteres)
         cod_match = re.search(r'\b([A-Z0-9]{8,20})\b', full_text)
         codigo = cod_match.group(1) if cod_match else "N/A"
 
         if len(mentions) >= 2:
-            quem_usou = mentions[0]   # O primeiro @ mencionado
-            quem_ganhou = mentions[-1] # O último @ mencionado (o streamer)
+            quem_usou = mentions[0]    # Primeiro ID encontrado
+            quem_ganhou = mentions[-1]  # Último ID encontrado (Streamer)
 
             try:
-                # Salva no banco de dados
+                # Salva no banco de dados e pega o total
                 total = registrar_ponto(quem_usou, quem_ganhou, codigo)
                 
                 canal_sucesso = bot.get_channel(CANAL_LOG_SUCESSO_ID) or await bot.fetch_channel(CANAL_LOG_SUCESSO_ID)
                 if canal_sucesso:
+                    # Layout que você gostou:
                     await canal_sucesso.send(
                         f"✅ **Código Identificado!**\n"
                         f"👤 **Quem usou:** <@{quem_usou}>\n"
@@ -162,13 +173,14 @@ async def on_message(message):
                         f"📈 **Total do Streamer:** `{total}` pontos"
                     )
             except Exception as e:
-                print(f"Erro ao salvar: {e}")
+                print(f"Erro ao salvar no banco: {e}")
         else:
-            # Se não achou as menções, avisa o que ele leu para podermos ajustar
+            # Se não achar os IDs, mostra o que ele conseguiu ler para ajuste
             log_erro = bot.get_channel(CANAL_LOG_ERRO_ID) or await bot.fetch_channel(CANAL_LOG_ERRO_ID)
             if log_erro:
-                await log_erro.send(f"⚠️ Não consegui extrair os @membros.\n**Texto capturado:** {full_text[:200]}")
+                await log_erro.send(f"⚠️ Não consegui extrair os membros.\n**Texto capturado:** `{full_text[:150]}`")
 
+    # Garante que os comandos (!ver, etc) continuem funcionando
     await bot.process_commands(message)
 
 # --- 5. FLASK (KEEP ALIVE) ---
