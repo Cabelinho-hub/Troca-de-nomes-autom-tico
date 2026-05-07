@@ -78,9 +78,12 @@ def get_ranking(dias=None):
 # --- 2. LÓGICA DE IDENTIFICAÇÃO (Logs) ---
 @bot.event
 async def on_message(message):
-    # 1. Filtro básico
-    if message.author.id != BOT_ALVO_ID or message.channel.id != CANAL_CODIGOS_ID:
+    # ELE SÓ PODE IGNORAR SE FOR ELE MESMO
+    if message.author == bot.user:
         return
+
+    # Verifique se essa condição está correta (use print para debugar)
+    if message.author.id == int(BOT_ALVO_ID) and message.channel.id == int(CANAL_CODIGOS_ID)
 
     # 2. Coleta todo o texto (da mensagem e de embeds)
     full_text = message.content
